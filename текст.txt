@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Points Center — Вход</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<header><h1>Points Center — Вход</h1></header>
+<div class="container">
+  <div class="card">
+    <h2>Войти</h2>
+    <div class="flex">
+      <input type="text" id="login" placeholder="Логин" style="flex:1 1 200px;">
+      <input type="password" id="password" placeholder="Пароль" style="flex:1 1 200px;">
+      <button id="go">Войти</button>
+    </div>
+    <p>Директор: <b>missveronika / Kazakhstan08</b></p>
+    <p>Учителя: <b>teacher1/teacher1</b>, <b>teacher2/teacher2</b>, <b>teacher3/teacher3</b></p>
+    <p><button class="link" id="guest">Зайти как гость (только просмотр)</button></p>
+  </div>
+</div>
+<script src="app.js"></script>
+<script>
+  document.getElementById('go').onclick = () => {
+    const u = document.getElementById('login').value.trim();
+    const p = document.getElementById('password').value.trim();
+    if(!login(u,p)) { alert('Неверный логин или пароль'); return; }
+    const role = roleOf(u);
+    if(role === 'director') location.href = 'director.html';
+    else if(role === 'teacher') location.href = u + '.html';
+    else location.href = 'guest.html';
+  };
+  document.getElementById('guest').onclick = () => location.href = 'guest.html';
+</script>
+</body>
+</html>

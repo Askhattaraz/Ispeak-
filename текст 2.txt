@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Points Center — Директор</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<header><h1>Points Center — Панель директора</h1></header>
+<div class="container">
+
+  <div class="card">
+    <div class="flex-between">
+      <h2>Создать группу</h2>
+      <button class="link" onclick="logout()">Выйти</button>
+    </div>
+    <div class="flex">
+      <input id="gName" placeholder="Название группы" style="flex:1 1 240px;">
+      <select id="gTeacher">
+        <option value="teacher1">teacher1</option>
+        <option value="teacher2">teacher2</option>
+        <option value="teacher3">teacher3</option>
+        <option value="missveronika">missveronika (директор)</option>
+      </select>
+      <label class="checkbox"><input type="checkbox" id="gPrivate"> Приватная (видна только директору)</label>
+      <button onclick="createGroup()">Добавить</button>
+    </div>
+  </div>
+
+  <div id="groupsRoot"></div>
+
+</div>
+<script src="app.js"></script>
+<script>
+  const username = 'missveronika';
+  const role = 'director';
+  let db = loadDB();
+
+  function logout(){ location.href = 'index.html'; }
+
+  function createGroup(){
+    const name = document.getElementById('gName').value.trim();
+    const teacher = document.getElementById('gTeacher').value;
+    const isPrivate = document.getElementById('gPrivate').checked;
+    if(!name) return;
+    addGroup(db, {name, teacher, isPrivate});
+    document.getElementById('gName').value='';
+    render();
+  }
+
+  // drag&drop
+  let draggedStudent = null;
+
+  function render(){
+    db = loadDB();
+    const root = document.getElementById('groupsRoot');
+    root.innerHTML='';
+    const groups = Object.values(db.groups).sort((a,b)=>a.createdAt-b.createdAt);
+    if(!groups.length){ root.innerHTML='<div class="card"><p>Групп пока нет</p></div>'; return; }
+
+    groups.forEach(g=>{
+      const card = document.createElement('div');
+      card.className='card group-drop-zone';
+      card.dataset.groupId = g.id;
+
+      // dnd target
+      card.ondragover = e => { e.preventDefault(); card.classList.add('dragover'); };
+      card.ondragleave = () => card.classList.remove('dragover');
+      card.ondrop = e => {
+        e.preventDefault();
+        card.classList.remove('dragover');
+        if(!draggedStudent) return;
+        moveStudent(db, draggedStudent.studentId, g.id);
+        draggedStudent = null;
+        render();
+      };
+
+      const header = document.createElement('div');
+      header.className='flex-between';
+      header.innerHTML = '<h2>'+g.name+' <span class="badge">'+g.teacher+(g.isPrivate?' • приватная':'')+'</span></h2>';
+      const delBtn = document.createElement('button');
+      delBtn.className='danger';
+      delBtn.textContent='Удалить группу';
+      delBtn.onclick = ()=>{ if(confirm('Удалить группу?')){ deleteGroup(db,g.id); render(); } };
+      header.appendChild(delBtn);
+      card.appendChild(header);
+
+      // добавить ученика
+      const addRow = document.createElement('div');
+      addRow.className='flex';
+      addRow.innerHTML = '<input placeholder="Имя ученика" id="name_'+g.id+'" style="flex:1 1 200px;">';
+      const addBtn = document.createElement('button');
+      addBtn.textContent='Добавить ученика';
+      addBtn.onclick = ()=>{
+        const v = document.getElementById('name_'+g.id).value.trim();
+        if(!v) return;
+        addStudent(db,{groupId:g.id,name:v});
+        render();
+      };
+      addRow.appendChild(addBtn);
+      card.appendChild(addRow);
+
+      // список учеников
+      const list = document.createElement('div');
+      const studs = getStudentsByGroup(db,g.id);
+      studs.forEach((s)=>{
+        const row = document.createElement('div');
+        row.className='student';
+        row.draggable = true;
+        row.ondragstart = e => {
+          draggedStudent = { studentId: s.id };
+          row.classList.add('dragging');
+        };
+        row.ondragend = e => {
+          row.classList.remove('dragging');
+        };
+
+        const left = document.createElement('div');
+        left.innerHTML = '<b>'+s.name+'</b> — '+s.points+' баллов';
+        row.appendChild(left);
+
+        const right = document.createElement('div');
+        right.className='history';
+
+        // операции
+        const ops = document.createElement('div');
+        ops.className='flex';
+        ops.innerHTML = `
+          <input type="number" class="points-input" id="delta_${s.id}" value="1">
+          <button onclick="plus('${s.id}')">+</button>
+          <button onclick="minus('${s.id}')">-</button>
+          <button class="danger" onclick="delStudent('${s.id}')">Удалить</button>
+        `;
+
+        // история (с выборочным удалением)
+        const histBox = document.createElement('div');
+        histBox.className='history';
+        if(!s.history.length){
+          histBox.innerHTML='<i>История пуста</i>';
+        }else{
+          s.history.slice().reverse().forEach((h,i)=>{
+            const realIndex = s.history.length-1-i;
+            const item = document.createElement('div');
+            item.className='history-item';
+            item.innerHTML = `<span>${new Date(h.ts).toLocaleString()} — ${h.delta>0?'+':''}${h.delta} ${h.note?('('+h.note+')'):''}</span>`;
+            const delH = document.createElement('button');
+            delH.className='link';
+            delH.textContent='удалить';
+            delH.onclick = ()=>{ deleteHistoryEntry(db, s.id, realIndex); render(); };
+            item.appendChild(delH);
+            histBox.appendChild(item);
+          });
+        }
+
+        right.appendChild(ops);
+        right.appendChild(histBox);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+      card.appendChild(list);
+      root.appendChild(card);
+    });
+  }
+
+  function plus(studentId){
+    const delta = Number(document.getElementById('delta_'+studentId).value||0);
+    if(!delta) return;
+    changePoints(db, studentId, delta, 'директор');
+    render();
+  }
+  function minus(studentId){
+    const delta = Number(document.getElementById('delta_'+studentId).value||0);
+    if(!delta) return;
+    changePoints(db, studentId, -delta, 'директор');
+    render();
+  }
+  function delStudent(studentId){
+    if(confirm('Удалить ученика?')){
+      deleteStudent(db, studentId);
+      render();
+    }
+  }
+
+  render();
+</script>
+</body>
+</html>

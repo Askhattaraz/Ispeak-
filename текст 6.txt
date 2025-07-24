@@ -1,0 +1,100 @@
+// ===== Пароли =====
+const PASSWORDS = {
+  missveronika: 'Kazakhstan08',
+  teacher1: 'teacher1',
+  teacher2: 'teacher2',
+  teacher3: 'teacher3'
+};
+
+// ===== БД в localStorage =====
+function loadDB(){
+  const raw = localStorage.getItem('pc_db_v5');
+  if(raw){
+    try { return JSON.parse(raw); } catch(e){ console.error(e); }
+  }
+  const now = Date.now();
+  const db = {
+    groups: {
+      g1:{id:'g1', name:'Группа A', teacher:'teacher1', isPrivate:false, createdAt:now},
+      g2:{id:'g2', name:'Группа B', teacher:'teacher2', isPrivate:false, createdAt:now},
+      g3:{id:'g3', name:'Группа C', teacher:'teacher3', isPrivate:false, createdAt:now},
+    },
+    students: {
+      s1:{id:'s1', name:'Анна',   groupId:'g1', points:10, history:[{ts:now, delta:+10, note:'Старт'}]},
+      s2:{id:'s2', name:'Игорь',  groupId:'g1', points:5,  history:[{ts:now, delta:+5, note:'Старт'}]},
+      s3:{id:'s3', name:'Мария',  groupId:'g2', points:7,  history:[{ts:now, delta:+7, note:'Старт'}]},
+      s4:{id:'s4', name:'Сергей', groupId:'g3', points:3,  history:[{ts:now, delta:+3, note:'Старт'}]},
+    }
+  };
+  saveDB(db);
+  return db;
+}
+function saveDB(db){ localStorage.setItem('pc_db_v5', JSON.stringify(db)); }
+function uid(prefix){ return prefix + Math.random().toString(36).slice(2,9) + Date.now().toString(36); }
+
+// ===== Авторизация / роли =====
+function login(username, password){
+  return PASSWORDS[username] && PASSWORDS[username] === password;
+}
+function roleOf(username){
+  if(username === 'missveronika') return 'director';
+  if(['teacher1','teacher2','teacher3'].includes(username)) return 'teacher';
+  return 'guest';
+}
+
+// ===== Выборки =====
+function getGroupsForUser(db, username){
+  const role = roleOf(username);
+  return Object.values(db.groups).filter(g => {
+    if(role === 'director') return true;
+    if(role === 'teacher') return g.teacher === username; // учитель видит все свои (и только свои), приват директора — не его
+    return false;
+  }).sort((a,b)=>a.createdAt-b.createdAt);
+}
+function getStudentsByGroup(db, groupId){
+  return Object.values(db.students).filter(s=>s.groupId===groupId);
+}
+
+// ===== Мутации =====
+function addGroup(db, {name, teacher, isPrivate}){
+  const id = uid('g');
+  db.groups[id] = {id, name, teacher, isPrivate: !!isPrivate, createdAt: Date.now()};
+  saveDB(db);
+  return id;
+}
+function addStudent(db, {groupId, name}){
+  const id = uid('s');
+  db.students[id] = {id, name, groupId, points:0, history:[]};
+  saveDB(db);
+  return id;
+}
+function deleteGroup(db, id){
+  for(const sid of Object.keys(db.students)){
+    if(db.students[sid].groupId === id) delete db.students[sid];
+  }
+  delete db.groups[id];
+  saveDB(db);
+}
+function deleteStudent(db, id){
+  delete db.students[id];
+  saveDB(db);
+}
+function moveStudent(db, studentId, toGroupId){
+  const s = db.students[studentId];
+  if(!s) return;
+  s.groupId = toGroupId;
+  saveDB(db);
+}
+function changePoints(db, studentId, delta, note=''){
+  const s = db.students[studentId];
+  if(!s) return;
+  s.points += delta;
+  s.history.push({ts:Date.now(), delta, note});
+  saveDB(db);
+}
+function deleteHistoryEntry(db, studentId, index){
+  const s = db.students[studentId];
+  if(!s) return;
+  s.history.splice(index,1);
+  saveDB(db);
+}

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Points Center — teacher1</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<header><h1>Points Center — teacher1</h1></header>
+<div class="container">
+  <div class="card flex-between">
+    <h2>Мои группы</h2>
+    <button class="link" onclick="logout()">Выйти</button>
+  </div>
+
+  <div class="card">
+    <h3>Создать группу</h3>
+    <div class="flex">
+      <input id="gName" placeholder="Название группы" style="flex:1 1 240px;">
+      <button onclick="createGroup()">Добавить</button>
+    </div>
+  </div>
+
+  <div id="groupsRoot"></div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  const username = 'teacher1';
+  const role = 'teacher';
+  let db = loadDB();
+
+  function logout(){ location.href = 'index.html'; }
+
+  function createGroup(){
+    const name = document.getElementById('gName').value.trim();
+    if(!name) return;
+    addGroup(db, {name, teacher: username, isPrivate:false});
+    document.getElementById('gName').value='';
+    render();
+  }
+
+  function render(){
+    db = loadDB();
+    const root = document.getElementById('groupsRoot');
+    root.innerHTML='';
+    const groups = getGroupsForUser(db, username);
+    if(!groups.length){ root.innerHTML='<div class="card"><p>Групп пока нет</p></div>'; return; }
+
+    groups.forEach(g=>{
+      const card = document.createElement('div');
+      card.className='card';
+      const header = document.createElement('div');
+      header.className='flex-between';
+      header.innerHTML = '<h2>'+g.name+' <span class="badge">'+g.teacher+'</span></h2>';
+      const delBtn = document.createElement('button');
+      delBtn.className='danger';
+      delBtn.textContent='Удалить группу';
+      delBtn.onclick = ()=>{ if(confirm('Удалить группу?')){ deleteGroup(db,g.id); render(); } };
+      header.appendChild(delBtn);
+      card.appendChild(header);
+
+      const addRow = document.createElement('div');
+      addRow.className='flex';
+      addRow.innerHTML = '<input placeholder="Имя ученика" id="name_'+g.id+'" style="flex:1 1 200px;">';
+      const addBtn = document.createElement('button');
+      addBtn.textContent='Добавить ученика';
+      addBtn.onclick = ()=>{
+        const v = document.getElementById('name_'+g.id).value.trim();
+        if(!v) return;
+        addStudent(db,{groupId:g.id,name:v});
+        render();
+      };
+      addRow.appendChild(addBtn);
+      card.appendChild(addRow);
+
+      const list = document.createElement('div');
+      const studs = getStudentsByGroup(db,g.id);
+      studs.forEach(s=>{
+        const row = document.createElement('div');
+        row.className='student';
+        const left = document.createElement('div');
+        left.innerHTML = '<b>'+s.name+'</b> — '+s.points+' баллов';
+        row.appendChild(left);
+
+        const right = document.createElement('div');
+        right.className='history';
+        const ops = document.createElement('div');
+        ops.className='flex';
+        ops.innerHTML = `
+          <input type="number" class="points-input" id="delta_${s.id}" value="1">
+          <button onclick="plus('${s.id}')">+</button>
+          <button onclick="minus('${s.id}')">-</button>
+          <button class="danger" onclick="delStudent('${s.id}')">Удалить</button>
+        `;
+
+        const histBox = document.createElement('div');
+        histBox.className='history';
+        if(!s.history.length){
+          histBox.innerHTML='<i>История пуста</i>';
+        }else{
+          s.history.slice().reverse().forEach(h=>{
+            const item = document.createElement('div');
+            item.className='history-item';
+            item.innerHTML = `<span>${new Date(h.ts).toLocaleString()} — ${h.delta>0?'+':''}${h.delta} ${h.note?('('+h.note+')'):''}</span>`;
+            histBox.appendChild(item);
+          });
+        }
+
+        right.appendChild(ops);
+        right.appendChild(histBox);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+      card.appendChild(list);
+
+      root.appendChild(card);
+    });
+  }
+
+  function plus(studentId){
+    const delta = Number(document.getElementById('delta_'+studentId).value||0);
+    if(!delta) return;
+    changePoints(db, studentId, delta, username);
+    render();
+  }
+  function minus(studentId){
+    const delta = Number(document.getElementById('delta_'+studentId).value||0);
+    if(!delta) return;
+    changePoints(db, studentId, -delta, username);
+    render();
+  }
+  function delStudent(studentId){
+    if(confirm('Удалить ученика?')){
+      deleteStudent(db, studentId);
+      render();
+    }
+  }
+
+  render();
+</script>
+</body>
+</html>
